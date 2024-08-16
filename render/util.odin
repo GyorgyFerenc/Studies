@@ -1,5 +1,7 @@
 package main
 
+import "core:math"
+
 Color :: [4]u8;
 
 BLACK :: Color{0   , 0,    0,    0xFF};
@@ -25,6 +27,10 @@ weight_color :: proc(color: Color, weigth: f32) -> Color{
         v = v * 255;
         return cast(u8) v;
     }
+}
+
+blend :: proc(c1, c2: Color) -> Color{
+    return c1 * (0xFF - c2.a) + c2.a * c2;
 }
 
 Canvas :: struct{

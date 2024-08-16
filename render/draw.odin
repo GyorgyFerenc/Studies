@@ -1,6 +1,7 @@
 package main
 
 import "core:math"
+import "core:fmt"
 
 draw_triangle :: proc(canvas: ^Canvas, p1, p2, p3: v2, c1, c2, c3: Color){
     min_x := cast(int) math.min(p1.x, p2.x, p3.x);
@@ -25,8 +26,6 @@ draw_triangle :: proc(canvas: ^Canvas, p1, p2, p3: v2, c1, c2, c3: Color){
         }
     }
 }
-
-
 
 
 Fragment_Shader :: proc(x, y: int, color: Color, data: rawptr) -> Color;
