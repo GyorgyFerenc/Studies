@@ -3,9 +3,12 @@ package main
 import "core:math"
 import "core:math/linalg"
 
-v2 :: [2]f32;
-v3 :: [3]f32;
-v4 :: [4]f32;
+v2  :: [2]f32;
+v2i :: [2]int;
+v3  :: [3]f32;
+v3i :: [3]int;
+v4  :: [4]f32;
+v4i :: [4]int;
 
 Transform_2D :: matrix[3, 3]f32;
 IDENT_TRANSFORM_2D: Transform_2D : 1;
@@ -126,6 +129,12 @@ apply_2d :: proc(p: v2, transform: Transform_2D) -> v2{
     return r.xy;
 }
 
+apply_3d :: proc(p: v3, transform: Transform_3D) -> v3{
+    v: v4 = {p.x, p.y, p.z, 1};
+    r := transform * v;
+    return r.xyz;
+}
+
 scale_3d :: proc(scaler: v3) -> Transform_3D{
     return { 
         scaler.x,        0,        0, 0,
@@ -167,4 +176,5 @@ combine :: proc{
 
 apply :: proc{
     apply_2d,
+    apply_3d,
 }
