@@ -7,6 +7,7 @@ import "core:math"
 import "core:math/linalg"
 import "core:math/rand"
 
+
 HEIGHT :: 100;
 WIDTH  :: 100;
 RATIO  :: 10;
