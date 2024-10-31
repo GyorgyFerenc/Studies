@@ -2,12 +2,11 @@ package main
 
 import "core:fmt"
 import "core:c"
+import "core:mem"
 
 import "vendor:glfw"
 import gl "vendor:OpenGL"
-
-OPENGL_MAJOR :: 3;
-OPENGL_MINOR :: 3;
+import "engine"
 
 App :: struct{
     window: glfw.WindowHandle,
@@ -18,24 +17,37 @@ App :: struct{
 app: App;
 
 main :: proc(){
-    glfw.Init();    
-    defer glfw.Terminate();
+    gpa := context.allocator;
+    ta := context.temp_allocator;
+
+    //context.allocator = mem.panic_allocator();
+    //context.temp_allocator = mem.panic_allocator();
+
+    engine.init(ta);
+    defer engine.terminate();
+    engine.create_main_window(800, 600, "Test");
     
-    glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, OPENGL_MAJOR);
-    glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, OPENGL_MINOR);
-    glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
-    app.window = glfw.CreateWindow(800, 600, "Test", nil, nil);
-    if app.window == nil{
-        fmt.println("Error");
-        return;
+    sh, err := engine.load_shader_from_file("vs.glsl", "main.odin");
+    fmt.println(err);
+    
+    for !engine.should_close(){
+        defer engine.render_loop();
+        free_all(ta);
+        
+        engine.clear_background({0.1, 0.2, 0.3, 1.0});
     }
-    glfw.MakeContextCurrent(app.window);
-    
-    gl.load_up_to(OPENGL_MAJOR, OPENGL_MINOR, glfw.gl_set_proc_address);
-    gl.Viewport(0, 0, 800, 600);
-    
-    glfw.SetFramebufferSizeCallback(app.window, frame_buffer_callback);
-    
+}
+
+update :: proc(){
+    if glfw.GetKey(app.window, glfw.KEY_ESCAPE) == glfw.PRESS{
+        glfw.SetWindowShouldClose(app.window, true);
+    }
+}
+
+draw :: proc(){
+}
+
+    /*
     vsc := VERTEX_SHADER_TEXT;
     app.vertex_shader = gl.CreateShader(gl.VERTEX_SHADER);
     gl.ShaderSource(app.vertex_shader, 1, &vsc, nil);
@@ -70,7 +82,6 @@ main :: proc(){
     gl.DeleteShader(app.vertex_shader);
     gl.DeleteShader(app.fragment_shader);
 
-
     vertecies := [?]f32{
         -0.5, -0.5, 0.0,
         0.5, -0.5, 0.0,
@@ -88,50 +99,6 @@ main :: proc(){
     
     gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * size_of(f32), 0);
     gl.EnableVertexAttribArray(0);
-    
-    for !glfw.WindowShouldClose(app.window){
-        update();
-        
-        gl.ClearColor(0.2, 0.3, 0.3, 1);
-        gl.Clear(gl.COLOR_BUFFER_BIT);
-        
-        gl.UseProgram(app.shader_program);
-        gl.BindVertexArray(vertex_array_object);
-        gl.DrawArrays(gl.TRIANGLES, 0, 3);
-    
-        glfw.SwapBuffers(app.window);
-        glfw.PollEvents();
-    }
-}
+    */
 
-update :: proc(){
-    if glfw.GetKey(app.window, glfw.KEY_ESCAPE) == glfw.PRESS{
-        glfw.SetWindowShouldClose(app.window, true);
-    }
-}
-
-draw :: proc(){
-}
-
-frame_buffer_callback :: proc "c" (_: glfw.WindowHandle, w, h: c.int){
-    gl.Viewport(0, 0, w, h);
-}
-
-VERTEX_SHADER_TEXT: cstring : `
-#version 330 core
-layout (location = 0) in vec3 pos;
-
-void main(){
-    gl_Position = vec4(pos, 1.0);
-}
-`
-
-FRAGMENT_SHADER_TEXT: cstring :`
-#version 330 core
-out vec4 FragColor;
-
-void main(){
-    FragColor = vec4(1.0, 0.5, 0.2, 1.0);
-}
-`
 
