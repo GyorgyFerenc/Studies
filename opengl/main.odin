@@ -3,6 +3,8 @@ package main
 import "core:fmt"
 import "core:c"
 import "core:mem"
+import "core:strings"
+
 
 import "vendor:glfw"
 import gl "vendor:OpenGL"
@@ -20,22 +22,61 @@ main :: proc(){
     gpa := context.allocator;
     ta := context.temp_allocator;
 
-    //context.allocator = mem.panic_allocator();
-    //context.temp_allocator = mem.panic_allocator();
+    context.allocator = mem.panic_allocator();
+    context.temp_allocator = mem.panic_allocator();
 
-    engine.init(ta);
+    engine.init(800, 600, "Test", ta);
     defer engine.terminate();
-    engine.create_main_window(800, 600, "Test");
     
-    sh, err := engine.load_shader_from_file("vs.glsl", "main.odin");
+    sh, err := engine.load_shader_from_memory("", MY_FS_SHADER);
     fmt.println(err);
     
     for !engine.should_close(){
         defer engine.render_loop();
-        free_all(ta);
         
         engine.clear_background({0.1, 0.2, 0.3, 1.0});
+        
+        engine.use_shader(sh);
+        defer engine.drop_shader();
+        
+        //engine.set_uniform(sh, "color", engine.RED);
+        
+        engine.draw_triangle_v2(
+            {{-1,  -1, 0.0}, engine.RED},
+            {{ 1,  -1, 0.0}, engine.GREEN},
+            {{ 0,   1, 0.0}, engine.BLUE},
+        );
     }
+}
+
+MY_FS_SHADER ::`
+#version 330 core
+out vec4 final_color;
+
+in vec4 vertex_color;
+
+uniform vec4 color;
+
+void main(){
+    final_color = vertex_color;
+}
+`
+
+
+draw_shit :: proc(){
+/*
+    my_shader := load_shader("shader.vs", "shader.fs");
+    
+    use_shader(my_shader);
+    defer drop_shader();
+    
+    //...
+    
+    camera_use(camera);
+    defer camera_drop();
+    
+    draw_triangle_v1(p1, p2, p3, color);
+*/
 }
 
 update :: proc(){

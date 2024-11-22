@@ -14,11 +14,17 @@ OPENGL_MINOR :: 3;
 
 Engine :: struct{
     window: glfw.WindowHandle,
-    ta: mem.Allocator, // temporary_allocator
+    ta:     mem.Allocator, // temporary_allocator
+    shader: Shader,
+    vao: c.uint,
+    vbo: c.uint,
+    
+    
+    current_shader: Shader,
 }
 engine: Engine;
 
-init :: proc(ta: mem.Allocator){
+init :: proc(width, height: int, title: string, ta: mem.Allocator){
     engine.ta = ta;
 
     glfw.Init();    
@@ -26,31 +32,37 @@ init :: proc(ta: mem.Allocator){
     glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, OPENGL_MAJOR);
     glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, OPENGL_MINOR);
     glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE);
-}
-
-terminate :: proc(){
-    glfw.Terminate();
-}
-
-create_main_window :: proc(width, height: int, title: string){
-    w, h := cast(c.int) width, cast(c.int) height;
     
+    w, h := cast(c.int) width, cast(c.int) height;
     t := strings.clone_to_cstring(title, engine.ta);
-
     engine.window = glfw.CreateWindow(w, h, t, nil, nil);
     if engine.window == nil{
         panic("Window could not be created");
     }
     
     glfw.MakeContextCurrent(engine.window);
-    glfw.SetFramebufferSizeCallback(engine.window, frame_buffer_callback);
     
     gl.load_up_to(OPENGL_MAJOR, OPENGL_MINOR, glfw.gl_set_proc_address);
     gl.Viewport(0, 0, w, h);
     
+    glfw.SetFramebufferSizeCallback(engine.window, frame_buffer_callback);
+
+    shader, err := load_shader_from_memory(VERTEX_SHADER_TEXT, FRAGMENT_SHADER_TEXT);
+    if err.kind != .None do panic(err.log);
+    use_shader(shader);
+    
+    engine.shader = shader;
+    
+    gl.GenVertexArrays(1, &engine.vao);
+    gl.GenBuffers(1, &engine.vbo);
+    
     frame_buffer_callback :: proc "c" (_: glfw.WindowHandle, w, h: c.int){
         gl.Viewport(0, 0, w, h);
     }
+}
+
+terminate :: proc(){
+    glfw.Terminate();
 }
 
 should_close :: proc() -> bool{
@@ -68,128 +80,64 @@ render_loop :: proc(){
     free_all(engine.ta);
 }
 
-draw_triangle :: proc(p1, p2, p3: Vertex){
+draw_triangle_v1 :: proc(p1, p2, p3: v3, color: Color){
+    vertecies := [?]v3{p1, p2, p3};
+    color_loc := gl.GetUniformLocation(engine.shader, "color");
+    
+    gl.BindVertexArray(engine.vao);
+    gl.BindBuffer(gl.ARRAY_BUFFER, engine.vbo);
+    
+    gl.BufferData(gl.ARRAY_BUFFER, size_of(vertecies), &vertecies, gl.DYNAMIC_DRAW);
+    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * size_of(f32), 0);
+    gl.EnableVertexAttribArray(0);
+    gl.Uniform4f(color_loc, color.r, color.g, color.b, color.a);
+    
+    gl.DrawArrays(gl.TRIANGLES, 0, 3);
 }
 
-/*
-    If the any of the paths are empty the default shader is used for that
+draw_triangle_v2 :: proc(p1, p2, p3: Vertex){
+    vertecies := [?]Vertex{p1, p2, p3};
     
-    Shader_Error.log is allocated with the engine.ta
-*/
-load_shader_from_file :: proc(vertex_shader_path, fragment_shader_path: string) -> (Shader, Shader_Error){
-    vss := VERTEX_SHADER_TEXT;
-    fss := FRAGMENT_SHADER_TEXT;
+    gl.BindVertexArray(engine.vao);
+    gl.BindBuffer(gl.ARRAY_BUFFER, engine.vbo);
     
-    if vertex_shader_path != ""{
-        err: Shader_Error;
-        vss, err = load_file(vertex_shader_path);
-        if err.kind != .None do return {}, err;
-    }
-    if fragment_shader_path != ""{
-        err: Shader_Error;
-        fss, err = load_file(fragment_shader_path);
-        if err.kind != .None do return {}, err;
-    }
-
-    return load_shader(vss, fss);
+    gl.BufferData(gl.ARRAY_BUFFER, size_of(vertecies), &vertecies, gl.DYNAMIC_DRAW);
     
-    load_file :: proc(path: string) -> (string, Shader_Error){
-        source, ok := os.read_entire_file(path, engine.ta);
-        if !ok{
-            return {}, {kind = .File_Load, log = strings.clone(path, engine.ta)};
-        }
-        return cast(string) source, {};
-    }
+    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, size_of(Vertex), 0);
+    gl.EnableVertexAttribArray(0);
+    
+    gl.VertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, size_of(Vertex), offset_of(p1.color));
+    gl.EnableVertexAttribArray(1);
+    
+    gl.DrawArrays(gl.TRIANGLES, 0, 3);
 }
-
-/*
-    If the any of the sources are empty the default shader is used for that
-    
-    Shader_Error.log is allocated with the engine.ta
-*/
-load_shader :: proc(vertex_shader_source, fragment_shader_source: string) -> (Shader, Shader_Error){
-    vss := vertex_shader_source;
-    fss := fragment_shader_source;
-    if vss == "" do vss = VERTEX_SHADER_TEXT;
-    if fss == "" do fss = FRAGMENT_SHADER_TEXT;
-    
-    vs := gl.CreateShader(gl.VERTEX_SHADER);
-    defer gl.DeleteShader(vs);
-    err := compile_shader(vs, vss);
-    if err.kind != .None do return {}, err;
-    
-    fs := gl.CreateShader(gl.FRAGMENT_SHADER);
-    defer gl.DeleteShader(fs);
-    err = compile_shader(fs, fss, "Fragment Shader:\n");
-    if err.kind != .None do return {}, err;
-    
-    shader := gl.CreateProgram();
-    gl.AttachShader(shader, vs);
-    gl.AttachShader(shader, fs);
-    gl.LinkProgram(shader);
-    success: c.int;
-    gl.GetProgramiv(shader, gl.LINK_STATUS, &success);
-    if success == 0{
-        info_log_len: c.int;
-        gl.GetProgramiv(shader, gl.INFO_LOG_LENGTH, &info_log_len);
-        err := Shader_Error{
-            kind = .Link,
-            log = cast(string)  make([]u8, info_log_len, allocator = engine.ta),
-        };
-        gl.GetProgramInfoLog(shader, info_log_len - 1, nil, raw_data(err.log[:])); // ignore NULL termination
-        return {}, err;
-    }
-
-    return shader, {};
-
-    compile_shader :: proc(sh: c.uint, source: string, err_msg: string) -> Shader_Error{
-        err := Shader_Error{};
-        
-        csource := cast(cstring) raw_data(source);
-        lengths := [?]c.int{ cast(c.int) len(source)};
-        gl.ShaderSource(sh, 1, &csource, cast([^]c.int) &lengths);
-        gl.CompileShader(sh);
-        success: c.int;
-        gl.GetShaderiv(sh, gl.COMPILE_STATUS, &success);
-        if success == 0{
-            info_log_len: c.int;
-            gl.GetShaderiv(sh, gl.INFO_LOG_LENGTH, &info_log_len);
-            err.kind = .Compile;
-            err.log = cast(string) make([]u8, info_log_len, allocator = engine.ta);
-            gl.GetShaderInfoLog(sh, info_log_len - 1, nil, raw_data(err.log[:])); // ignore NULL termination
-        }
-        return err;
-    }
-}
-
-Shader_Error :: struct{
-    kind: enum{
-        None = 0,
-        File_Load,
-        Compile,
-        Link,
-    },
-    log: string,
-};
-
-Shader :: c.uint;
 
 Color :: [4]f32;
 v4    :: [4]f32;
 v3    :: [3]f32;
 v2    :: [2]f32;
 
-Vertex :: struct{
+Vertex :: struct {
     position: v3,
     color: Color,
 }
 
+Location :: c.int;
+
+RED   :: Color{1, 0, 0, 1};
+GREEN :: Color{0, 1, 0, 1};
+BLUE  :: Color{0, 0, 1, 1};
+
 VERTEX_SHADER_TEXT ::`
 #version 330 core
 layout (location = 0) in vec3 pos;
+layout (location = 1) in vec4 color;
+
+out vec4 vertex_color;
 
 void main(){
     gl_Position = vec4(pos, 1.0);
+    vertex_color = color;
 }
 `
 
@@ -197,7 +145,11 @@ FRAGMENT_SHADER_TEXT ::`
 #version 330 core
 out vec4 FragColor;
 
+in vec4 vertex_color;
+
+uniform vec4 color;
+
 void main(){
-    FragColor = vec4(1.0, 0.5, 0.2, 1.0);
+    FragColor = vertex_color; //vec4(1.0, 0.5, 0.2, 1.0);
 }
 `
