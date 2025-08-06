@@ -1,0 +1,31 @@
+body{
+    font-family: 'Arial';
+}
+
+li {
+    font-family: 'Times New Roman';
+}
+
+h1 {
+    color: blue;
+    font-family: sans-serif;
+}
+
+code {
+    font-family: monospace;
+    color: red;
+}
+
+.special {
+    color: green;
+}
+
+li + li{
+    background: black;
+    color: white;
+}
+
+ol li{
+    background: black;
+    color: white;
+}
